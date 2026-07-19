@@ -11,11 +11,11 @@ val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS")
 val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD")
 
 android {
-    namespace = "com.example.ciphervault"
+    namespace = "com.securemirage.ciphervault"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.ciphervault"
+        applicationId = "com.securemirage.ciphervault"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -86,7 +86,7 @@ val validateReleaseSigningConfiguration = tasks.register("validateReleaseSigning
     doLast {
         val keystore = releaseKeystorePath.orNull?.let(::file)
         check(keystore?.isFile == true) {
-            "ANDROID_KEYSTORE_PATH must point to the release upload keystore."
+            "ANDROID_KEYSTORE_PATH must point to the permanent release keystore."
         }
         check(!releaseKeystorePassword.orNull.isNullOrBlank()) {
             "ANDROID_KEYSTORE_PASSWORD must be set for release builds."

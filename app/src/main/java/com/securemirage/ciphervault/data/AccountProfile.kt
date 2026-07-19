@@ -1,4 +1,4 @@
-package com.example.ciphervault.data
+package com.securemirage.ciphervault.data
 
 import java.security.MessageDigest
 

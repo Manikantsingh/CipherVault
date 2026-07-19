@@ -1,4 +1,4 @@
-package com.example.ciphervault.core
+package com.securemirage.ciphervault.core
 
 object MergeEngine {
     fun merge(operations: Collection<VaultOperation>): MergedVault {

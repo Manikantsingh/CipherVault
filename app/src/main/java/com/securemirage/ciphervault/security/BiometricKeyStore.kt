@@ -1,4 +1,4 @@
-package com.example.ciphervault.security
+package com.securemirage.ciphervault.security
 
 import android.content.Context
 import android.os.Build

@@ -1,4 +1,4 @@
-package com.example.ciphervault.sync
+package com.securemirage.ciphervault.sync
 
 import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
