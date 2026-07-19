@@ -1,13 +1,15 @@
-package com.example.ciphervault
+package com.securemirage.ciphervault
 
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -84,13 +86,15 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.NoCredentialException
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import com.example.ciphervault.core.CredentialEntry
-import com.example.ciphervault.core.IntegrityException
-import com.example.ciphervault.data.VaultRepository
-import com.example.ciphervault.data.VaultUpdate
-import com.example.ciphervault.data.BackgroundSyncScheduler
-import com.example.ciphervault.data.accountProfileId
-import com.example.ciphervault.sync.DriveClient
+import com.securemirage.ciphervault.core.CredentialEntry
+import com.securemirage.ciphervault.core.IntegrityException
+import com.securemirage.ciphervault.data.VaultRepository
+import com.securemirage.ciphervault.data.VaultUpdate
+import com.securemirage.ciphervault.data.BackgroundSyncScheduler
+import com.securemirage.ciphervault.data.accountProfileId
+import com.securemirage.ciphervault.sync.DriveClient
+import com.securemirage.ciphervault.update.ReleaseMetadata
+import com.securemirage.ciphervault.update.ReleaseUpdateChecker
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
@@ -107,6 +111,7 @@ class MainActivity : FragmentActivity() {
     private val authorizationClient by lazy { Identity.getAuthorizationClient(this) }
     private val connectivityManager by lazy { getSystemService(ConnectivityManager::class.java) }
     private var state by mutableStateOf<AppState>(AppState.Loading)
+    private var availableUpdate by mutableStateOf<ReleaseMetadata?>(null)
     private var accessToken: String? = null
     private var driveRequestInProgress = false
     private var networkCallbackRegistered = false
@@ -151,6 +156,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         state = if (repository.hasLocalVault()) AppState.Locked else AppState.SignedOut
         repository.activeAccountId()?.let { BackgroundSyncScheduler.enqueue(applicationContext, it) }
+        checkForUpdate()
         setContent {
             CipherVaultTheme {
                 CipherVaultApp(
@@ -168,9 +174,27 @@ class MainActivity : FragmentActivity() {
                     onSync = ::authorizeDrive,
                     onSwitchAccount = ::switchGoogleAccount,
                     onRetry = { state = if (repository.hasLocalVault()) AppState.Locked else AppState.SignedOut },
+                    availableUpdate = availableUpdate,
+                    onOpenUpdate = ::openUpdate,
+                    onDismissUpdate = { availableUpdate = null },
                 )
             }
         }
+    }
+
+    private fun checkForUpdate() {
+        if (BuildConfig.ENVIRONMENT != "production") return
+        lifecycleScope.launch {
+            runCatching {
+                ReleaseUpdateChecker(applicationContext).latestIfAvailable(BuildConfig.VERSION_CODE)
+            }.onSuccess { availableUpdate = it }
+                .onFailure { Log.w("CipherVault", "Signed release update check failed", it) }
+        }
+    }
+
+    private fun openUpdate(update: ReleaseMetadata) {
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.apkUrl)))
+        availableUpdate = null
     }
 
     override fun onStart() {
@@ -503,6 +527,9 @@ private fun CipherVaultApp(
     onSync: () -> Unit,
     onSwitchAccount: () -> Unit,
     onRetry: () -> Unit,
+    availableUpdate: ReleaseMetadata?,
+    onOpenUpdate: (ReleaseMetadata) -> Unit,
+    onDismissUpdate: () -> Unit,
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (state) {
@@ -534,6 +561,17 @@ private fun CipherVaultApp(
             is AppState.Vault -> VaultScreen(state, onSave, onDelete, onSync, onSwitchAccount)
             is AppState.Error -> ErrorScreen(state.message, onRetry)
         }
+    }
+    availableUpdate?.let { update ->
+        AlertDialog(
+            onDismissRequest = onDismissUpdate,
+            title = { Text("CipherVault ${update.versionName} is available") },
+            text = { Text("This release was verified with CipherVault's signing certificate.") },
+            confirmButton = {
+                TextButton(onClick = { onOpenUpdate(update) }) { Text("Download") }
+            },
+            dismissButton = { TextButton(onClick = onDismissUpdate) { Text("Later") } },
+        )
     }
 }
 

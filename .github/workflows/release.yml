@@ -14,11 +14,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-signed-bundle:
-    name: Build signed bundle
+  build-signed-release:
+    name: Build signed release
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
+    permissions:
+      contents: write
     env:
       PROD_WEB_CLIENT_ID: ${{ vars.PROD_WEB_CLIENT_ID }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -59,28 +61,75 @@ jobs:
             fi
           done
 
-      - name: Restore upload keystore
+      - name: Restore release keystore
         shell: bash
         run: |
-          keystore_path="$RUNNER_TEMP/ciphervault-upload.jks"
+          keystore_path="$RUNNER_TEMP/ciphervault-release.p12"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
           chmod 600 "$keystore_path"
           echo "ANDROID_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
 
-      - name: Test, lint, and build signed bundle
+      - name: Test, lint, and build signed release
         run: >-
           ./gradlew --no-daemon
           testReleaseUnitTest
           lintRelease
+          assembleRelease
           bundleRelease
           "-PPROD_WEB_CLIENT_ID=$PROD_WEB_CLIENT_ID"
 
-      - name: Verify bundle signature
-        run: jarsigner -verify app/build/outputs/bundle/release/app-release.aab
+      - name: Verify release signatures
+        shell: bash
+        run: |
+          apksigner_path="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          if [[ -z "$apksigner_path" ]]; then
+            echo "::error::Android apksigner was not found."
+            exit 1
+          fi
+          "$apksigner_path" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+          jarsigner -verify app/build/outputs/bundle/release/app-release.aab
 
-      - name: Generate checksum
-        working-directory: app/build/outputs/bundle/release
-        run: sha256sum app-release.aab > app-release.aab.sha256
+      - name: Prepare release files
+        id: release-files
+        shell: bash
+        run: |
+          mkdir -p release
+          apk_name="CipherVault-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "release/$apk_name"
+          sha256sum "release/$apk_name" | sed 's#release/##' > "release/$apk_name.sha256"
+          echo "apk_name=$apk_name" >> "$GITHUB_OUTPUT"
+
+      - name: Create signed release metadata
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          APK_NAME: ${{ steps.release-files.outputs.apk_name }}
+        run: |
+          aapt_path="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          if [[ -z "$aapt_path" ]]; then
+            echo "::error::Android aapt was not found."
+            exit 1
+          fi
+          badging="$("$aapt_path" dump badging "release/$APK_NAME" | head -1)"
+          version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$badging")"
+          version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$badging")"
+          if [[ "$GITHUB_REF_NAME" != "v$version_name" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME must match APK version v$version_name."
+            exit 1
+          fi
+          apk_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${APK_NAME}"
+          apk_sha256="$(cut -d ' ' -f1 "release/$APK_NAME.sha256")"
+          jq -cn \
+            --argjson schemaVersion 1 \
+            --argjson versionCode "$version_code" \
+            --arg versionName "$version_name" \
+            --arg apkUrl "$apk_url" \
+            --arg sha256 "$apk_sha256" \
+            '{schemaVersion: $schemaVersion, versionCode: $versionCode, versionName: $versionName, apkUrl: $apkUrl, sha256: $sha256}' \
+            > release/release-metadata.json
+          java scripts/SignReleaseMetadata.java \
+            release/release-metadata.json \
+            release/release-metadata.json.sig
 
       - name: Upload verification reports
         if: always()
@@ -93,17 +142,34 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Upload signed bundle
+      - name: Upload signed release
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ciphervault-${{ github.ref_name }}-signed
           path: |
+            release/
             app/build/outputs/bundle/release/app-release.aab
-            app/build/outputs/bundle/release/app-release.aab.sha256
           if-no-files-found: error
           retention-days: 30
 
-      - name: Remove upload keystore
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_NAME: ${{ steps.release-files.outputs.apk_name }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "release/$APK_NAME" \
+            "release/$APK_NAME.sha256" \
+            release/release-metadata.json \
+            release/release-metadata.json.sig \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "CipherVault $GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Remove release keystore
         if: always()
         run: rm -f "$ANDROID_KEYSTORE_PATH"

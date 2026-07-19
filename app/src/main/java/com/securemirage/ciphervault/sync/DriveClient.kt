@@ -1,4 +1,4 @@
-package com.example.ciphervault.sync
+package com.securemirage.ciphervault.sync
 
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers

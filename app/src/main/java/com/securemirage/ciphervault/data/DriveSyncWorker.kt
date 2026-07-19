@@ -1,11 +1,11 @@
-package com.example.ciphervault.data
+package com.securemirage.ciphervault.data
 
 import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.WorkerParameters
-import com.example.ciphervault.sync.DriveClient
+import com.securemirage.ciphervault.sync.DriveClient
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope

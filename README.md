@@ -16,6 +16,7 @@ CipherVault is a native Kotlin credential manager for Android. It uses Jetpack C
 - Account-scoped local vault profiles that let users switch Google accounts without mixing wrapped keys or encrypted operation histories.
 - Deterministic multi-device conflict resolution with durable deletion tombstones.
 - An explicit integrity error when authenticated decryption fails.
+- Signed update notifications backed by the installed APK's own release certificate.
 
 ## Run the app
 
@@ -31,7 +32,7 @@ CipherVault is a native Kotlin credential manager for Android. It uses Jetpack C
 1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
 2. Enable the Google Drive API.
 3. Configure the Google Auth Platform consent screen and add the non-sensitive `https://www.googleapis.com/auth/drive.appdata` scope.
-4. Create an Android OAuth client for package `com.example.ciphervault` and add the SHA-1 of the signing certificate.
+4. Create an Android OAuth client for package `com.securemirage.ciphervault` and add the SHA-1 of the signing certificate.
 5. Create a Web OAuth client. Credential Manager requires this Web client ID as its server client ID.
 6. Add the development Web client ID to the user-level Gradle properties file (`~/.gradle/gradle.properties` on macOS/Linux or `%USERPROFILE%\.gradle\gradle.properties` on Windows):
 
@@ -43,8 +44,8 @@ CipherVault has separate development and production build configurations:
 
 | Build type | Application ID | App label | OAuth property |
 | --- | --- | --- | --- |
-| `debug` | `com.example.ciphervault.debug` | CipherVault Dev | `DEV_WEB_CLIENT_ID` |
-| `release` | `com.example.ciphervault` | CipherVault | `PROD_WEB_CLIENT_ID` |
+| `debug` | `com.securemirage.ciphervault.debug` | CipherVault Dev | `DEV_WEB_CLIENT_ID` |
+| `release` | `com.securemirage.ciphervault` | CipherVault | `PROD_WEB_CLIENT_ID` |
 
 Register each application ID and its signing-certificate SHA-1 as a separate Android OAuth client in the corresponding Google Cloud project. The debug build temporarily accepts the legacy `WEB_CLIENT_ID` property as a fallback. Release builds require an explicit production Web OAuth client ID:
 
@@ -55,23 +56,25 @@ Register each application ID and its signing-certificate SHA-1 as a separate And
 
 The production Web client ID is an identifier, not a secret. Release signing keys and passwords are secrets and must never be committed.
 
-### Signed release pipeline
+### Production distribution
 
-The `Signed release` GitHub Actions workflow runs manually or when a tag beginning with `v` is pushed. Configure a GitHub environment named `production` with this variable:
+Production APKs are distributed through [GitHub Releases](https://github.com/Manikantsingh/CipherVault/releases). Google Play enrollment is not required. The permanent release key must be generated outside the repository and kept in encrypted offline backups; see [docs/RELEASING.md](docs/RELEASING.md) before configuring a release.
+
+The `Signed release` workflow runs manually or when a tag beginning with `v` is pushed. The GitHub `production` environment requires approval and contains this variable:
 
 - `PROD_WEB_CLIENT_ID`: production Web OAuth client ID.
 
 Add these encrypted environment secrets:
 
-- `ANDROID_KEYSTORE_BASE64`: Base64-encoded upload keystore.
-- `ANDROID_KEYSTORE_PASSWORD`: upload keystore password.
-- `ANDROID_KEY_ALIAS`: upload key alias.
-- `ANDROID_KEY_PASSWORD`: upload key password.
+- `ANDROID_KEYSTORE_BASE64`: Base64-encoded permanent release keystore.
+- `ANDROID_KEYSTORE_PASSWORD`: release keystore password.
+- `ANDROID_KEY_ALIAS`: release key alias.
+- `ANDROID_KEY_PASSWORD`: release key password.
 
-On Windows, encode the upload keystore without line wrapping and send it directly to GitHub CLI without printing it:
+On Windows, encode the release keystore without line wrapping and send it directly to GitHub CLI without printing it:
 
 ```powershell
-$keystoreBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\secure\ciphervault-upload.jks"))
+$keystoreBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\secure\ciphervault-release.p12"))
 $keystoreBase64 | gh secret set ANDROID_KEYSTORE_BASE64 --env production
 gh secret set ANDROID_KEYSTORE_PASSWORD --env production
 gh secret set ANDROID_KEY_ALIAS --env production
@@ -79,7 +82,9 @@ gh secret set ANDROID_KEY_PASSWORD --env production
 gh variable set PROD_WEB_CLIENT_ID --env production --body "000000000000-production.apps.googleusercontent.com"
 ```
 
-The last three secret commands prompt securely for their values. The workflow restores the keystore only in the runner's temporary directory, runs release tests and lint, signs the Android App Bundle, verifies its signature, generates a SHA-256 checksum, uploads both as workflow artifacts, and deletes the temporary keystore even after failure.
+The last three secret commands prompt securely for their values. The workflow restores the keystore only in the runner's temporary directory, runs release tests and lint, signs and verifies an APK and Android App Bundle, generates an APK SHA-256 checksum, and deletes the temporary keystore even after failure.
+
+For a version tag, the workflow also signs `release-metadata.json` with the APK key and publishes the APK, checksum, metadata, and detached signature as a GitHub Release. Production builds use GitHub's API only to locate those two metadata assets; the app parses and displays an update only after the raw metadata signature verifies against its own installed signing certificate. Manual workflow runs upload private validation artifacts but do not publish a release.
 
 Trigger a release manually from **Actions → Signed release → Run workflow**, or create a version tag after updating `versionCode` and `versionName`:
 
@@ -96,6 +101,8 @@ Open the project in Android Studio, let Gradle sync, then run the `app` configur
 ```
 
 Never commit OAuth secrets or signing keys. A Web client ID is an identifier rather than a secret, but keeping environment-specific configuration out of source avoids accidental production misconfiguration.
+
+Read the public [privacy policy](PRIVACY.md), [security policy](SECURITY.md), and [F-Droid evaluation](docs/FDROID.md) before publishing.
 
 ## How encryption works
 

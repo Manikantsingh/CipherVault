@@ -1,4 +1,4 @@
-package com.example.ciphervault.data
+package com.securemirage.ciphervault.data
 
 import android.content.Context
 import androidx.work.BackoffPolicy

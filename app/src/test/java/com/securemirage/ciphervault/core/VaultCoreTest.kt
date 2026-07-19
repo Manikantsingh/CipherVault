@@ -1,4 +1,4 @@
-package com.example.ciphervault.core
+package com.securemirage.ciphervault.core
 
 import java.util.Base64
 import kotlinx.serialization.encodeToString
