@@ -47,7 +47,7 @@ These items are candidates for CipherVault version 2. They are not required for 
 ## Engineering and Release
 
 - [ ] Add CI for unit tests, Android lint, dependency scanning, and debug builds.
-- [ ] Add a signed release-build pipeline.
+- [x] Add a signed release-build pipeline.
 - [ ] Configure production OAuth clients and release signing.
 - [ ] Define a crash-reporting and telemetry strategy that never records credentials, passphrases, tokens, or decrypted vault data.
 - [ ] Run Android lint and dependency/security scans as release gates.

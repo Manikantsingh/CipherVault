@@ -5,6 +5,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH")
+val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS")
+val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD")
+
 android {
     namespace = "com.example.ciphervault"
     compileSdk = 35
@@ -17,6 +22,15 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = releaseKeystorePath.orNull?.let(::file)
+            storePassword = releaseKeystorePassword.orNull
+            keyAlias = releaseKeyAlias.orNull
+            keyPassword = releaseKeyPassword.orNull
+        }
     }
 
     buildTypes {
@@ -33,6 +47,8 @@ android {
         }
 
         release {
+            signingConfig = signingConfigs.getByName("release")
+
             val webClientId = providers.gradleProperty("PROD_WEB_CLIENT_ID")
                 .orElse("MISSING_PROD_WEB_CLIENT_ID")
             buildConfigField("String", "WEB_CLIENT_ID", "\"${webClientId.get()}\"")
@@ -66,8 +82,26 @@ val validateProductionConfiguration = tasks.register("validateProductionConfigur
     }
 }
 
+val validateReleaseSigningConfiguration = tasks.register("validateReleaseSigningConfiguration") {
+    doLast {
+        val keystore = releaseKeystorePath.orNull?.let(::file)
+        check(keystore?.isFile == true) {
+            "ANDROID_KEYSTORE_PATH must point to the release upload keystore."
+        }
+        check(!releaseKeystorePassword.orNull.isNullOrBlank()) {
+            "ANDROID_KEYSTORE_PASSWORD must be set for release builds."
+        }
+        check(!releaseKeyAlias.orNull.isNullOrBlank()) {
+            "ANDROID_KEY_ALIAS must be set for release builds."
+        }
+        check(!releaseKeyPassword.orNull.isNullOrBlank()) {
+            "ANDROID_KEY_PASSWORD must be set for release builds."
+        }
+    }
+}
+
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
-    dependsOn(validateProductionConfiguration)
+    dependsOn(validateProductionConfiguration, validateReleaseSigningConfiguration)
 }
 
 dependencies {
