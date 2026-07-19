@@ -33,11 +33,27 @@ CipherVault is a native Kotlin credential manager for Android. It uses Jetpack C
 3. Configure the Google Auth Platform consent screen and add the non-sensitive `https://www.googleapis.com/auth/drive.appdata` scope.
 4. Create an Android OAuth client for package `com.example.ciphervault` and add the SHA-1 of the signing certificate.
 5. Create a Web OAuth client. Credential Manager requires this Web client ID as its server client ID.
-6. Add the Web client ID to the user-level Gradle properties file (`~/.gradle/gradle.properties` on macOS/Linux or `%USERPROFILE%\.gradle\gradle.properties` on Windows):
+6. Add the development Web client ID to the user-level Gradle properties file (`~/.gradle/gradle.properties` on macOS/Linux or `%USERPROFILE%\.gradle\gradle.properties` on Windows):
 
 ```properties
-WEB_CLIENT_ID=000000000000-example.apps.googleusercontent.com
+DEV_WEB_CLIENT_ID=000000000000-development.apps.googleusercontent.com
 ```
+
+CipherVault has separate development and production build configurations:
+
+| Build type | Application ID | App label | OAuth property |
+| --- | --- | --- | --- |
+| `debug` | `com.example.ciphervault.debug` | CipherVault Dev | `DEV_WEB_CLIENT_ID` |
+| `release` | `com.example.ciphervault` | CipherVault | `PROD_WEB_CLIENT_ID` |
+
+Register each application ID and its signing-certificate SHA-1 as a separate Android OAuth client in the corresponding Google Cloud project. The debug build temporarily accepts the legacy `WEB_CLIENT_ID` property as a fallback. Release builds require an explicit production Web OAuth client ID:
+
+```powershell
+.\gradlew.bat assembleDebug
+.\gradlew.bat bundleRelease '-PPROD_WEB_CLIENT_ID=000000000000-production.apps.googleusercontent.com'
+```
+
+The production Web client ID is an identifier, not a secret. Release signing keys and passwords are secrets and must never be committed.
 
 Open the project in Android Studio, let Gradle sync, then run the `app` configuration. From a terminal with JDK 17 and the Android SDK configured:
 
