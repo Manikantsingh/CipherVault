@@ -16,10 +16,29 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        val webClientId = providers.gradleProperty("WEB_CLIENT_ID")
-            .orElse("YOUR_WEB_CLIENT_ID.apps.googleusercontent.com")
-        buildConfigField("String", "WEB_CLIENT_ID", "\"${webClientId.get()}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-dev"
+
+            val webClientId = providers.gradleProperty("DEV_WEB_CLIENT_ID")
+                .orElse(providers.gradleProperty("WEB_CLIENT_ID"))
+                .orElse("YOUR_DEV_WEB_CLIENT_ID.apps.googleusercontent.com")
+            buildConfigField("String", "WEB_CLIENT_ID", "\"${webClientId.get()}\"")
+            buildConfigField("String", "ENVIRONMENT", "\"development\"")
+            resValue("string", "app_name", "CipherVault Dev")
+        }
+
+        release {
+            val webClientId = providers.gradleProperty("PROD_WEB_CLIENT_ID")
+                .orElse("MISSING_PROD_WEB_CLIENT_ID")
+            buildConfigField("String", "WEB_CLIENT_ID", "\"${webClientId.get()}\"")
+            buildConfigField("String", "ENVIRONMENT", "\"production\"")
+            resValue("string", "app_name", "CipherVault")
+        }
     }
 
     buildFeatures {
@@ -35,6 +54,20 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+val validateProductionConfiguration = tasks.register("validateProductionConfiguration") {
+    val productionClientId = providers.gradleProperty("PROD_WEB_CLIENT_ID")
+    doLast {
+        val clientId = productionClientId.orNull
+        check(!clientId.isNullOrBlank() && clientId.endsWith(".apps.googleusercontent.com")) {
+            "PROD_WEB_CLIENT_ID must be set to the production Web OAuth client ID."
+        }
+    }
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(validateProductionConfiguration)
 }
 
 dependencies {
