@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#006B5F</color>
+
+    <style name="Theme.CipherVault" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F5F4EF</item>
+        <item name="android:navigationBarColor">#F5F4EF</item>
+    </style>
+</resources>
