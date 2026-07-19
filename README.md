@@ -55,6 +55,39 @@ Register each application ID and its signing-certificate SHA-1 as a separate And
 
 The production Web client ID is an identifier, not a secret. Release signing keys and passwords are secrets and must never be committed.
 
+### Signed release pipeline
+
+The `Signed release` GitHub Actions workflow runs manually or when a tag beginning with `v` is pushed. Configure a GitHub environment named `production` with this variable:
+
+- `PROD_WEB_CLIENT_ID`: production Web OAuth client ID.
+
+Add these encrypted environment secrets:
+
+- `ANDROID_KEYSTORE_BASE64`: Base64-encoded upload keystore.
+- `ANDROID_KEYSTORE_PASSWORD`: upload keystore password.
+- `ANDROID_KEY_ALIAS`: upload key alias.
+- `ANDROID_KEY_PASSWORD`: upload key password.
+
+On Windows, encode the upload keystore without line wrapping and send it directly to GitHub CLI without printing it:
+
+```powershell
+$keystoreBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\secure\ciphervault-upload.jks"))
+$keystoreBase64 | gh secret set ANDROID_KEYSTORE_BASE64 --env production
+gh secret set ANDROID_KEYSTORE_PASSWORD --env production
+gh secret set ANDROID_KEY_ALIAS --env production
+gh secret set ANDROID_KEY_PASSWORD --env production
+gh variable set PROD_WEB_CLIENT_ID --env production --body "000000000000-production.apps.googleusercontent.com"
+```
+
+The last three secret commands prompt securely for their values. The workflow restores the keystore only in the runner's temporary directory, runs release tests and lint, signs the Android App Bundle, verifies its signature, generates a SHA-256 checksum, uploads both as workflow artifacts, and deletes the temporary keystore even after failure.
+
+Trigger a release manually from **Actions → Signed release → Run workflow**, or create a version tag after updating `versionCode` and `versionName`:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 Open the project in Android Studio, let Gradle sync, then run the `app` configuration. From a terminal with JDK 17 and the Android SDK configured:
 
 ```powershell
